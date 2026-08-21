@@ -18,6 +18,57 @@
   --text-body: #9a9aa5; /* muted grey body */
 }
 
+/*
+ * Cursor rules, in one place.
+ *
+ * The arrow is the default for the whole page — including runs of text, which
+ * would otherwise show the I-beam caret and read as "type here" on a page you
+ * only click. `cursor` inherits, so setting it on the root covers every
+ * element that owns no rule of its own.
+ *
+ * Only things you can actually press get the hand.
+ */
+body {
+  cursor: default;
+}
+
+/* Buttons and links. The explicit rule is required, not just decorative:
+   the browser's own stylesheet sets `cursor` directly on these elements, and
+   a rule on the element beats an inherited value. */
+a[href],
+button,
+[role="button"],
+select,
+summary {
+  cursor: pointer;
+}
+
+/* The one place the caret is the honest signal: fields you actually type in
+   (OTP, event search, sign-in and sign-up). */
+input,
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+}
+
+/* Non-typing inputs are press targets, not caret targets. */
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+input[type="color"],
+input[type="file"] {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+input:disabled {
+  cursor: not-allowed;
+}
+
 /* Anchor jumps (the navbar's "Events" link) glide instead of teleporting. */
 html {
   scroll-behavior: smooth;

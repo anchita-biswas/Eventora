@@ -2,12 +2,17 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axios';
 import { AuthContext } from '../context/AuthContext';
-import { FaCalendarAlt, FaMapMarkerAlt, FaChair, FaMoneyBillWave } from 'react-icons/fa';
+import { FaCalendarAlt, FaMapMarkerAlt, FaChair, FaMoneyBillWave, FaMinus, FaPlus } from 'react-icons/fa';
 import Watermark from '../components/Watermark';
 
 // Mirrors MAX_SEATS_PER_BOOKING in the booking controller, which is the one
 // that actually enforces it.
 const MAX_SEATS = 5;
+
+const stepperButtonClass =
+    'flex h-11 w-11 items-center justify-center rounded-lg bg-white/5 text-[var(--text-heading)] transition ' +
+    'hover:bg-[var(--accent-violet)] hover:text-white ' +
+    'disabled:pointer-events-none disabled:opacity-25 disabled:blur-[1px]';
 
 const EventDetail = () => {
     const { id } = useParams();
@@ -123,28 +128,59 @@ const EventDetail = () => {
 
                         {!isSoldOut && (
                             <div className="mb-4">
-                                <label htmlFor="seats" className="block text-sm font-medium text-[var(--text-heading)]/80 mb-2">
+                                <p id="seats-label" className="block text-sm font-medium text-[var(--text-heading)]/80 mb-2">
                                     How many seats?
-                                </label>
-                                <select
-                                    id="seats"
-                                    value={seats}
-                                    onChange={(e) => setSeats(Number(e.target.value))}
-                                    disabled={showOTP}
-                                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-[var(--text-heading)] focus:outline-none focus:border-[var(--accent-violet)] focus:ring-2 focus:ring-[var(--accent-violet)]/30 transition font-semibold disabled:opacity-60"
+                                </p>
+                                <div
+                                    role="group"
+                                    aria-labelledby="seats-label"
+                                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-2"
                                 >
-                                    {Array.from({ length: maxSeats }, (_, i) => i + 1).map((n) => (
-                                        <option key={n} value={n} className="bg-[var(--surface-card)]">
-                                            {n} {n === 1 ? 'seat' : 'seats'}
-                                        </option>
-                                    ))}
-                                </select>
-                                {event.ticketPrice > 0 && (
-                                    <p className="mt-2 text-sm text-[var(--text-body)]">
-                                        Total: <strong className="text-[var(--text-heading)]">₹{total}</strong>
-                                        <span className="text-xs"> ({seats} × ₹{event.ticketPrice})</span>
-                                    </p>
-                                )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setSeats((n) => Math.max(n - 1, 1))}
+                                        disabled={seats <= 1 || showOTP}
+                                        aria-label="Remove a seat"
+                                        className={stepperButtonClass}
+                                    >
+                                        <FaMinus />
+                                    </button>
+
+                                    {/* aria-live so the new count is announced when a
+                                        button is pressed — the number is the only thing
+                                        that changes, and it isn't the focused element. */}
+                                    <span aria-live="polite" className="text-center">
+                                        <span className="block text-2xl font-bold leading-none text-[var(--text-heading)]">
+                                            {seats}
+                                        </span>
+                                        <span className="block text-xs text-[var(--text-body)]">
+                                            {seats === 1 ? 'seat' : 'seats'}
+                                        </span>
+                                    </span>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setSeats((n) => Math.min(n + 1, maxSeats))}
+                                        disabled={seats >= maxSeats || showOTP}
+                                        aria-label="Add a seat"
+                                        className={stepperButtonClass}
+                                    >
+                                        <FaPlus />
+                                    </button>
+                                </div>
+                                {/* Always shown, free events included — a total that
+                                    vanishes on some events reads as a missing feature. */}
+                                <p className="mt-2 text-sm text-[var(--text-body)]">
+                                    Total:{' '}
+                                    {event.ticketPrice === 0 ? (
+                                        <strong className="text-emerald-400">Free</strong>
+                                    ) : (
+                                        <>
+                                            <strong className="text-[var(--text-heading)]">₹{total}</strong>
+                                            <span className="text-xs"> ({seats} × ₹{event.ticketPrice})</span>
+                                        </>
+                                    )}
+                                </p>
                             </div>
                         )}
 

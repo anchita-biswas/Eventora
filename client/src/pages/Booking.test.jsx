@@ -54,33 +54,86 @@ describe("EventDetail seat picker", () => {
     );
   }
 
-  it("offers 1 to 5 seats and prices the whole party", async () => {
+  const minus = () => screen.getByRole("button", { name: /remove a seat/i });
+  const plus = () => screen.getByRole("button", { name: /add a seat/i });
+  const count = () => screen.getByRole("group", { name: /how many seats/i });
+
+  async function setSeatsTo(n) {
+    await screen.findByRole("group", { name: /how many seats/i });
+    for (let i = 1; i < n; i += 1) fireEvent.click(plus());
+  }
+
+  it("starts at one seat with the minus step blurred out", async () => {
     renderDetail();
-    const select = await screen.findByLabelText(/how many seats/i);
+    await screen.findByRole("group", { name: /how many seats/i });
 
-    expect(select.options).toHaveLength(5);
-    expect([...select.options].map((o) => o.value)).toEqual([
-      "1",
-      "2",
-      "3",
-      "4",
-      "5",
-    ]);
-
-    fireEvent.change(select, { target: { value: "3" } });
-    expect(screen.getByText("₹1500")).toBeInTheDocument(); // 3 x 500
+    expect(count()).toHaveTextContent("1seat");
+    expect(minus()).toBeDisabled();
+    expect(minus().className).toMatch(/disabled:blur/);
+    expect(plus()).toBeEnabled();
   });
 
-  it("never offers more seats than the event has left", async () => {
+  it("steps the count up and down and prices the whole party", async () => {
+    renderDetail();
+    await setSeatsTo(3);
+
+    expect(count()).toHaveTextContent("3seats");
+    expect(screen.getByText("₹1500")).toBeInTheDocument(); // 3 x 500
+
+    fireEvent.click(minus());
+    expect(count()).toHaveTextContent("2seats");
+    expect(screen.getByText("₹1000")).toBeInTheDocument();
+  });
+
+  it("blurs the plus step once the 5-seat cap is reached", async () => {
+    renderDetail();
+    await setSeatsTo(5);
+
+    expect(count()).toHaveTextContent("5seats");
+    expect(plus()).toBeDisabled();
+    expect(plus().className).toMatch(/disabled:blur/);
+    expect(minus()).toBeEnabled();
+  });
+
+  it("shows a total on free events too, instead of hiding the line", async () => {
+    renderDetail({ ticketPrice: 0 });
+    await setSeatsTo(2);
+
+    expect(screen.getByText(/^Total:/)).toHaveTextContent("Total: Free");
+  });
+
+  it("stops short of the cap when the event has fewer seats left", async () => {
     renderDetail({ availableSeats: 2 });
-    const select = await screen.findByLabelText(/how many seats/i);
-    expect(select.options).toHaveLength(2);
+    await setSeatsTo(2);
+
+    expect(count()).toHaveTextContent("2seats");
+    expect(plus()).toBeDisabled();
+  });
+
+  it("holds the cap when the plus step is hammered in one tick", async () => {
+    renderDetail();
+    await screen.findByRole("group", { name: /how many seats/i });
+
+    // All ten land before React re-renders, so every one of them sees a
+    // still-enabled button — the clamp in the updater is the only thing
+    // stopping the count reaching 11.
+    for (let i = 0; i < 10; i += 1) fireEvent.click(plus());
+
+    expect(count()).toHaveTextContent("5seats");
+  });
+
+  it("holds the floor when the minus step is hammered in one tick", async () => {
+    renderDetail();
+    await setSeatsTo(3);
+
+    for (let i = 0; i < 10; i += 1) fireEvent.click(minus());
+
+    expect(count()).toHaveTextContent("1seat");
   });
 
   it("sends the chosen seat count with the booking", async () => {
     renderDetail();
-    const select = await screen.findByLabelText(/how many seats/i);
-    fireEvent.change(select, { target: { value: "4" } });
+    await setSeatsTo(4);
 
     // Step one asks for the OTP, step two submits the booking.
     api.post.mockResolvedValueOnce({ data: { message: "OTP sent to email" } });
