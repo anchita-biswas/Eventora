@@ -96,7 +96,7 @@ const EventDetail = () => {
                         <p className="text-[var(--text-body)] text-lg leading-relaxed mb-6">{event.description}</p>
                     </div>
 
-                    <div className="bg-white/5 p-6 rounded-2xl border border-white/10 min-w-75 w-full md:w-auto shrink-0">
+                    <div className="bg-white/5 p-6 rounded-2xl border border-white/10 w-full md:w-auto md:min-w-75 shrink-0">
                         <h3 className="text-xl font-semibold text-[var(--text-heading)] mb-6">Booking Details</h3>
 
                         <div className="space-y-4 mb-8">
