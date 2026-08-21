@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import api from "../utils/axios";
 import {
   FaCalendarAlt,
@@ -18,6 +18,20 @@ const Home = () => {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("");
+  const location = useLocation();
+
+  /*
+   * The navbar's "Events" link points at /#events. React Router owns
+   * navigation, so the browser never does its own hash scroll — this does it
+   * instead. Keyed on `location` rather than `location.hash` so clicking the
+   * link again while already parked on /#events still scrolls back up to the
+   * list. Smoothness and reduced-motion come from `scroll-behavior` in the
+   * stylesheet, so no options are passed here.
+   */
+  useEffect(() => {
+    if (location.hash !== "#events") return;
+    document.getElementById("events")?.scrollIntoView();
+  }, [location]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -184,7 +198,8 @@ const Home = () => {
       </section>
 
       {/* ======================= UPCOMING EVENTS ======================= */}
-      <section className="relative overflow-hidden">
+      {/* scroll-mt clears the sticky navbar so the heading isn't hidden under it */}
+      <section id="events" className="relative scroll-mt-24 overflow-hidden">
         <Watermark className="pointer-events-none absolute inset-0 select-none overflow-hidden" />
 
         <div className="relative z-10 mx-auto max-w-[1200px] px-6 py-20 md:py-28">

@@ -220,17 +220,25 @@ const seedDatabase = async () => {
           paymentStatus = "paid";
         }
 
+        // Parties of 1-3, so seeded data exercises multi-seat bookings.
+        const seats = Math.floor(Math.random() * 3) + 1;
+
         bookingsData.push({
           userId: user._id,
           eventId: event._id,
           status: status,
           paymentStatus: paymentStatus,
-          amount: event.ticketPrice,
+          seats: seats,
+          amount: event.ticketPrice * seats,
         });
 
-        // Deduct available seats specifically for confirmed tickets!
-        if (status === "confirmed") {
-          event.availableSeats -= 1;
+        // Seats are held from the moment a booking exists, not from when an
+        // admin confirms it — pending bookings occupy inventory too. Seeding
+        // only confirmed ones would leave availableSeats overstated, and
+        // cancelling a seeded pending booking would hand back a seat that was
+        // never taken, pushing the count above totalSeats.
+        if (status !== "cancelled") {
+          event.availableSeats -= seats;
           await event.save();
         }
       }

@@ -47,13 +47,16 @@ const send = async (to, subject, html, label) => {
   }
 };
 
-const sendBookingEmail = async (userEmail, userName, eventTitle) => {
+const sendBookingEmail = async (userEmail, userName, eventTitle, seats = 1) => {
+  const seatLabel = `${seats} ${seats === 1 ? "seat" : "seats"}`;
   await send(
     userEmail,
     `Booking Confirmed: ${eventTitle}`,
     `
             <h2>Hi ${userName}!</h2>
             <p>Your booking for the event <strong>${eventTitle}</strong> is successfully confirmed.</p>
+            <p>Seats reserved: <strong>${seatLabel}</strong>.</p>
+            <p>Your entry pass QR code is waiting on your Eventora dashboard — show it at the door.</p>
             <p>Thank you for choosing Eventora.</p>`,
     "booking_confirmed",
   );

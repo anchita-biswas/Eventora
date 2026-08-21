@@ -22,6 +22,17 @@ const bookingSchema = new mongoose.Schema(
       enum: ["not_paid", "paid"],
       default: "not_paid",
     },
+    // One booking covers a party of up to MAX_SEATS_PER_BOOKING. The unique
+    // userId+eventId index below still allows only one booking per event per
+    // user, so this is how a group books together.
+    seats: {
+      type: Number,
+      required: true,
+      default: 1,
+      min: 1,
+      max: 5,
+    },
+    // ticketPrice * seats, always computed server-side.
     amount: {
       type: Number,
       required: true,

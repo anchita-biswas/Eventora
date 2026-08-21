@@ -135,3 +135,49 @@ describe("POST /api/auth/login", () => {
     expect(res.body.needsVerification).toBe(true);
   });
 });
+
+describe("Session lives in an httpOnly cookie", () => {
+  async function createVerifiedUser(email, password) {
+    const hashed = await bcrypt.hash(password, 10);
+    return User.create({
+      name: "Cookie",
+      email,
+      password: hashed,
+      role: "user",
+      isVerified: true,
+    });
+  }
+
+  it("sets an httpOnly token cookie on login", async () => {
+    await createVerifiedUser("cookie@example.com", "correcthorse!1");
+    const res = await request(app).post("/api/auth/login").send({
+      email: "cookie@example.com",
+      password: "correcthorse!1",
+    });
+
+    const cookie = res.headers["set-cookie"].find((c) => c.startsWith("token="));
+    expect(cookie).toBeTruthy();
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=Lax/i);
+  });
+
+  it("authenticates a protected route with the cookie alone", async () => {
+    await createVerifiedUser("cookie-auth@example.com", "correcthorse!1");
+    const login = await request(app).post("/api/auth/login").send({
+      email: "cookie-auth@example.com",
+      password: "correcthorse!1",
+    });
+
+    const res = await request(app)
+      .get("/api/bookings/my")
+      .set("Cookie", login.headers["set-cookie"]);
+    expect(res.status).toBe(200);
+  });
+
+  it("clears the cookie on logout", async () => {
+    const res = await request(app).post("/api/auth/logout");
+    expect(res.status).toBe(200);
+    const cookie = res.headers["set-cookie"].find((c) => c.startsWith("token="));
+    expect(cookie).toMatch(/token=;/);
+  });
+});

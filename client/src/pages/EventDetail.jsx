@@ -5,6 +5,10 @@ import { AuthContext } from '../context/AuthContext';
 import { FaCalendarAlt, FaMapMarkerAlt, FaChair, FaMoneyBillWave } from 'react-icons/fa';
 import Watermark from '../components/Watermark';
 
+// Mirrors MAX_SEATS_PER_BOOKING in the booking controller, which is the one
+// that actually enforces it.
+const MAX_SEATS = 5;
+
 const EventDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -12,6 +16,7 @@ const EventDetail = () => {
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [bookingLoading, setBookingLoading] = useState(false);
+    const [seats, setSeats] = useState(1);
     const [otp, setOtp] = useState('');
     const [showOTP, setShowOTP] = useState(false);
     const [error, setError] = useState('');
@@ -46,8 +51,8 @@ const EventDetail = () => {
                 setShowOTP(true);
                 setSuccessMsg('OTP sent to your email. Please verify to confirm booking.');
             } else {
-                await api.post('/bookings', { eventId: event._id, otp });
-                setSuccessMsg('Booking requested! Awaiting admin confirmation.');
+                await api.post('/bookings', { eventId: event._id, otp, seats });
+                setSuccessMsg(`Booking requested for ${seats} ${seats === 1 ? 'seat' : 'seats'}! Awaiting admin confirmation.`);
                 setShowOTP(false);
             }
         } catch (err) {
@@ -61,6 +66,10 @@ const EventDetail = () => {
     if (error && !event) return <div className="text-center py-20 text-xl text-red-400">{error || 'Event not found'}</div>;
 
     const isSoldOut = event.availableSeats <= 0;
+    // Capped by the server's 5-per-booking limit and by what's actually left,
+    // so the dropdown can't offer a party the booking would reject.
+    const maxSeats = Math.min(MAX_SEATS, event.availableSeats);
+    const total = event.ticketPrice * seats;
 
     const infoRow = (icon, label, value) => (
         <div className="flex items-center gap-4">
@@ -112,10 +121,38 @@ const EventDetail = () => {
                             </p>
                         )}
 
+                        {!isSoldOut && (
+                            <div className="mb-4">
+                                <label htmlFor="seats" className="block text-sm font-medium text-[var(--text-heading)]/80 mb-2">
+                                    How many seats?
+                                </label>
+                                <select
+                                    id="seats"
+                                    value={seats}
+                                    onChange={(e) => setSeats(Number(e.target.value))}
+                                    disabled={showOTP}
+                                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-[var(--text-heading)] focus:outline-none focus:border-[var(--accent-violet)] focus:ring-2 focus:ring-[var(--accent-violet)]/30 transition font-semibold disabled:opacity-60"
+                                >
+                                    {Array.from({ length: maxSeats }, (_, i) => i + 1).map((n) => (
+                                        <option key={n} value={n} className="bg-[var(--surface-card)]">
+                                            {n} {n === 1 ? 'seat' : 'seats'}
+                                        </option>
+                                    ))}
+                                </select>
+                                {event.ticketPrice > 0 && (
+                                    <p className="mt-2 text-sm text-[var(--text-body)]">
+                                        Total: <strong className="text-[var(--text-heading)]">₹{total}</strong>
+                                        <span className="text-xs"> ({seats} × ₹{event.ticketPrice})</span>
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
                         {showOTP && (
                             <div className="mb-4">
-                                <label className="block text-sm font-medium text-[var(--text-heading)]/80 mb-2">Enter OTP to Confirm</label>
+                                <label htmlFor="otp" className="block text-sm font-medium text-[var(--text-heading)]/80 mb-2">Enter OTP to Confirm</label>
                                 <input
+                                    id="otp"
                                     type="text"
                                     required
                                     placeholder="6-digit code"

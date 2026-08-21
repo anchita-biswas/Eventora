@@ -2,8 +2,33 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/axios';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaTicketAlt, FaTimesCircle } from 'react-icons/fa';
+import { FaTicketAlt, FaTimesCircle, FaQrcode } from 'react-icons/fa';
+import { QRCodeSVG } from 'qrcode.react';
 import Watermark from '../components/Watermark';
+
+/*
+ * What the ticket QR carries: who is coming, what they're coming to, how many
+ * of them, and whether it's paid for — the four things someone on the door
+ * needs. The booking id leads the payload so a scanner can look the booking
+ * up rather than trust the rest of it.
+ *
+ * ponytail: unsigned payload, so this proves nothing on its own — anyone can
+ * generate a QR that says "paid". Fine while the door checks bookings against
+ * the API by id; sign it (HMAC over the payload, verified server-side) the
+ * moment a scanner is expected to accept a ticket offline.
+ */
+export const ticketPayload = (booking, user) =>
+    JSON.stringify({
+        ticket: booking._id,
+        name: user?.name,
+        email: user?.email,
+        event: booking.eventId?.title,
+        venue: booking.eventId?.location,
+        date: booking.eventId?.date,
+        pax: booking.seats || 1,
+        amount: booking.amount,
+        payment: booking.paymentStatus,
+    });
 
 const UserDashboard = () => {
     const { user } = useContext(AuthContext);
@@ -101,9 +126,31 @@ const UserDashboard = () => {
                                         </div>
                                         <div className="text-sm text-[var(--text-body)] mb-4 space-y-1">
                                             <p><strong className="text-[var(--text-heading)]/80 font-semibold">Date:</strong> {new Date(booking.eventId.date).toLocaleDateString()}</p>
+                                            <p><strong className="text-[var(--text-heading)]/80 font-semibold">Seats:</strong> {booking.seats || 1}</p>
                                             <p><strong className="text-[var(--text-heading)]/80 font-semibold">Amount:</strong> {booking.amount === 0 ? 'Free' : `₹${booking.amount}`}</p>
                                             <p><strong className="text-[var(--text-heading)]/80 font-semibold">Requested:</strong> {new Date(booking.createdAt).toLocaleDateString()}</p>
                                         </div>
+
+                                        {booking.status === 'confirmed' && (
+                                            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                                                <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-emerald-300">
+                                                    <FaQrcode /> Entry Pass
+                                                </p>
+                                                {/* QR needs a light quiet zone to scan reliably, so it keeps
+                                                    its own white card rather than sitting on the dark surface. */}
+                                                <div className="mx-auto w-fit rounded-lg bg-white p-3">
+                                                    <QRCodeSVG
+                                                        value={ticketPayload(booking, user)}
+                                                        size={140}
+                                                        level="M"
+                                                        title={`Entry pass for ${booking.eventId.title}`}
+                                                    />
+                                                </div>
+                                                <p className="mt-3 text-center text-xs text-[var(--text-body)]">
+                                                    Admits {booking.seats || 1} · {booking.paymentStatus === 'paid' ? 'Paid' : 'Payment pending'}
+                                                </p>
+                                            </div>
+                                        )}
                                     </>
                                 ) : (
                                     <p className="text-red-400 italic">Event details unavailable (might have been deleted)</p>

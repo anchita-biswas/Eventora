@@ -4,7 +4,7 @@ const Event = require("../models/Event");
 // instead of being interpreted as a pattern (blocks ReDoS + query injection).
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-exports.getAllEvents = async (req, res) => {
+exports.getAllEvents = async (req, res, next) => {
   try {
     const filters = {};
     if (req.query.category) {
@@ -33,11 +33,11 @@ exports.getAllEvents = async (req, res) => {
     const events = await query;
     res.json(events);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.getEventById = async (req, res) => {
+exports.getEventById = async (req, res, next) => {
   try {
     const event = await Event.findById(req.params.id);
     if (!event) {
@@ -45,11 +45,11 @@ exports.getEventById = async (req, res) => {
     }
     res.json(event);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.createEvent = async (req, res) => {
+exports.createEvent = async (req, res, next) => {
   const {
     title,
     description,
@@ -75,11 +75,11 @@ exports.createEvent = async (req, res) => {
     });
     res.status(201).json(event);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.updateEvent = async (req, res) => {
+exports.updateEvent = async (req, res, next) => {
   const {
     title,
     description,
@@ -91,30 +91,44 @@ exports.updateEvent = async (req, res) => {
     image,
   } = req.body;
   try {
-    const event = await Event.findByIdAndUpdate(
-      req.params.id,
-      {
-        title,
-        description,
-        date,
-        location,
-        category,
-        totalSeats,
-        ticketPrice,
-        image,
-      },
-      { new: true },
-    );
-    if (!event) {
+    const current = await Event.findById(req.params.id);
+    if (!current) {
       return res.status(404).json({ error: "Event not found" });
     }
+
+    const update = {
+      title,
+      description,
+      date,
+      location,
+      category,
+      totalSeats,
+      ticketPrice,
+      image,
+    };
+
+    /*
+     * Changing capacity has to move availableSeats with it, otherwise raising
+     * totalSeats leaves a sold-out event sold out forever and lowering it can
+     * leave more seats on sale than exist. Seats already taken are the fixed
+     * quantity here, so the remainder is what's left of the new total — never
+     * negative when capacity is cut below what's already booked.
+     */
+    if (totalSeats !== undefined && Number(totalSeats) !== current.totalSeats) {
+      const booked = current.totalSeats - current.availableSeats;
+      update.availableSeats = Math.max(0, Number(totalSeats) - booked);
+    }
+
+    const event = await Event.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+    });
     res.json(event);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.deleteEvent = async (req, res) => {
+exports.deleteEvent = async (req, res, next) => {
   try {
     const event = await Event.findByIdAndDelete(req.params.id);
     if (!event) {
@@ -122,6 +136,6 @@ exports.deleteEvent = async (req, res) => {
     }
     res.json({ message: "Event deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };

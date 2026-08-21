@@ -1,9 +1,14 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { FaCheckCircle } from 'react-icons/fa';
 
 const PaymentSuccess = () => {
     const { state } = useLocation();
+    // Only meaningful when arrived at from a real booking in the dashboard,
+    // which passes the event through router state. Opened directly by URL
+    // there is no booking to report on, so send the visitor to their tickets.
+    if (!state) return <Navigate to="/dashboard" replace />;
+
     return (
         <div className="min-h-[70vh] flex flex-col items-center justify-center p-4">
             <div className="bg-[var(--surface-card)] p-10 rounded-3xl shadow-[0_28px_70px_-25px_rgba(0,0,0,0.9)] max-w-md w-full text-center border-t-8 border-emerald-500 border-x border-b border-white/5 transform transition-all hover:-translate-y-1">

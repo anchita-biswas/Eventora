@@ -4,14 +4,35 @@ const bcrypt = require("bcryptjs");
 const jwt = require('jsonwebtoken');
 const { sendOTPEmail } = require("../utils/email");
 
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
+
 const generateToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
+/*
+ * The session token goes out as an httpOnly cookie rather than something the
+ * client stores itself: localStorage is readable by any script on the page, so
+ * one XSS was a full 7-day account takeover. sameSite "lax" is enough because
+ * the API and the bundle share an origin in production, and the Vite dev
+ * server proxies /api so they share one in development too.
+ */
+const setAuthCookie = (res, token) => {
+  res.cookie("token", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: SESSION_MS,
+  });
+};
+
 // Register User
-exports.registerUser = async (req, res) => {
+exports.registerUser = async (req, res, next) => {
   try {
     const { name, password } = req.body;
+    if (!req.body.email || !name) {
+      return res.status(400).json({ error: "Name, email and password are required" });
+    }
     const email = req.body.email.toLowerCase().trim();
 
     const hasMinLength = (password || "").length >= 8;
@@ -49,15 +70,18 @@ exports.registerUser = async (req, res) => {
       email: user.email,
     });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    next(error);
   }
 };
 
 // Login User
-exports.loginUser = async (req, res) => {
+exports.loginUser = async (req, res, next) => {
   try {
-    const email = req.body.email.toLowerCase().trim();
     const { password } = req.body;
+    if (!req.body.email || !password) {
+      return res.status(400).json({ error: "Invalid email or password" });
+    }
+    const email = req.body.email.toLowerCase().trim();
 
     // Same generic error for "no such account" and "wrong password" —
     // distinguishing them lets an attacker enumerate registered emails.
@@ -85,23 +109,28 @@ exports.loginUser = async (req, res) => {
       });
     }
 
+    const token = generateToken(user._id, user.role);
+    setAuthCookie(res, token);
     res.json({
       message: "Login successful",
       _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
-      token: generateToken(user._id, user.role),
+      token,
     });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    next(error);
   }
 };
 
 // Verify OTP
-exports.verifyOTP = async (req, res) => {
+exports.verifyOTP = async (req, res, next) => {
   try {
     const { otp } = req.body;
+    if (!req.body.email || !otp) {
+      return res.status(400).json({ error: "Email and OTP are required" });
+    }
     const email = req.body.email.toLowerCase().trim();
     const otpRecord = await OTP.findOne({
       email,
@@ -118,16 +147,32 @@ exports.verifyOTP = async (req, res) => {
       { isVerified: true },
       { new: true },
     );
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired OTP" });
+    }
     await OTP.deleteMany({ email, action: "account_verification" });
+    const token = generateToken(user._id, user.role);
+    setAuthCookie(res, token);
     res.json({
       message: "Account verified successfully. You can now login.",
       _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
-      token: generateToken(user._id, user.role),
+      token,
     });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    next(error);
   }
+};
+
+// Logging out has to happen server-side now: the client can't clear an
+// httpOnly cookie itself.
+exports.logoutUser = (req, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  res.json({ message: "Logged out" });
 };

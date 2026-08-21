@@ -396,6 +396,14 @@ const AdminDashboard = () => {
                         </p>
                         <p className="text-[var(--text-body)] flex items-center gap-2 mb-1">
                           <span className="font-bold w-16 text-[var(--text-body)] uppercase text-xs">
+                            Seats:
+                          </span>
+                          <span className="font-semibold text-[var(--text-heading)]">
+                            {booking.seats || 1}
+                          </span>
+                        </p>
+                        <p className="text-[var(--text-body)] flex items-center gap-2 mb-1">
+                          <span className="font-bold w-16 text-[var(--text-body)] uppercase text-xs">
                             Amount:
                           </span>
                           <span

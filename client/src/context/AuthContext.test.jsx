@@ -47,7 +47,10 @@ describe("AuthContext.verifyOTP", () => {
     });
 
     expect(result.current.user.email).toBe("a@b.com");
-    expect(localStorage.getItem("token")).toBe("jwt-token");
+    // The session is an httpOnly cookie now, so the token must never be
+    // written anywhere script on the page can read it.
+    expect(localStorage.getItem("token")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("user")).token).toBeUndefined();
   });
 });
 
@@ -63,10 +66,13 @@ describe("AuthContext.logout", () => {
     });
     expect(result.current.user).toBeTruthy();
 
-    act(() => {
-      result.current.logout();
+    api.post.mockResolvedValueOnce({ data: { message: "Logged out" } });
+    await act(async () => {
+      await result.current.logout();
     });
 
+    // Only the server can expire the cookie, so logout has to call it.
+    expect(api.post).toHaveBeenCalledWith("/auth/logout");
     expect(result.current.user).toBeNull();
     expect(localStorage.getItem("user")).toBeNull();
     expect(localStorage.getItem("token")).toBeNull();

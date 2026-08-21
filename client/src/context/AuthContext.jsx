@@ -40,9 +40,9 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const { data } = await api.post("/auth/login", { email, password });
-      setUser(data);
-      localStorage.setItem("user", JSON.stringify(data));
-      localStorage.setItem("token", data.token);
+      const { token, ...profile } = data;
+      setUser(profile);
+      localStorage.setItem("user", JSON.stringify(profile));
       return data;
     } catch (err) {
       console.error("Login failed: ", err);
@@ -53,9 +53,9 @@ export const AuthProvider = ({ children }) => {
   const verifyOTP = async (email, otp) => {
     try {
       const { data } = await api.post("/auth/verify-otp", { email, otp });
-      setUser(data);
-      localStorage.setItem("user", JSON.stringify(data));
-      localStorage.setItem("token", data.token);
+      const { token, ...profile } = data;
+      setUser(profile);
+      localStorage.setItem("user", JSON.stringify(profile));
       return data;
     } catch (err) {
       console.error("OTP verification failed: ", err);
@@ -63,7 +63,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // Clearing state locally isn't enough now — only the server can expire an
+    // httpOnly cookie. Drop the local user either way so a failed request
+    // can't leave the UI looking signed in.
+    try {
+      await api.post("/auth/logout");
+    } catch (err) {
+      console.error("Logout request failed: ", err);
+    }
     setUser(null);
     localStorage.removeItem("user");
     localStorage.removeItem("token");

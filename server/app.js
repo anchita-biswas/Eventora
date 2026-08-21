@@ -1,9 +1,11 @@
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const path = require("path");
 const authRoutes = require("./routes/auth.js");
 const eventRoutes = require("./routes/event.js");
 const bookingRoutes = require("./routes/booking.js");
+const errorHandler = require("./middleware/errorHandler.js");
 
 const app = express();
 
@@ -19,6 +21,7 @@ const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
   .map((s) => s.trim());
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
@@ -38,5 +41,8 @@ app.use((req, res, next) => {
   }
   res.sendFile(path.join(clientDist, "index.html"));
 });
+
+// Last, so it catches whatever the routes above hand it.
+app.use(errorHandler);
 
 module.exports = app;

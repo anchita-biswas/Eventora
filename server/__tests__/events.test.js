@@ -78,3 +78,81 @@ describe("Event admin-only mutations", () => {
     expect(res.body.availableSeats).toBe(5);
   });
 });
+
+describe("PUT /api/events/:id keeps seat counts consistent", () => {
+  const baseEventBody = {
+    title: "E",
+    description: "d",
+    date: new Date().toISOString(),
+    location: "l",
+    category: "c",
+    ticketPrice: 0,
+    image: "http://x.com/y.png",
+  };
+
+  it("raises availableSeats when capacity grows", async () => {
+    const event = await makeEvent({ totalSeats: 10, availableSeats: 2 }); // 8 booked
+    const { token } = await makeAdmin("cap-up@example.com");
+
+    const res = await request(app)
+      .put(`/api/events/${event._id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ ...baseEventBody, totalSeats: 20 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.totalSeats).toBe(20);
+    expect(res.body.availableSeats).toBe(12); // 20 - 8 booked
+  });
+
+  it("never drops availableSeats below zero when capacity is cut", async () => {
+    const event = await makeEvent({ totalSeats: 10, availableSeats: 2 }); // 8 booked
+    const { token } = await makeAdmin("cap-down@example.com");
+
+    const res = await request(app)
+      .put(`/api/events/${event._id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ ...baseEventBody, totalSeats: 5 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.availableSeats).toBe(0);
+  });
+
+  it("leaves availableSeats alone when capacity is unchanged", async () => {
+    const event = await makeEvent({ totalSeats: 10, availableSeats: 2 });
+    const { token } = await makeAdmin("cap-same@example.com");
+
+    const res = await request(app)
+      .put(`/api/events/${event._id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ ...baseEventBody, totalSeats: 10 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.availableSeats).toBe(2);
+  });
+});
+
+describe("Errors do not leak internals", () => {
+  it("turns a malformed id into a 400 without Mongoose text", async () => {
+    const res = await request(app).get("/api/events/not-an-object-id");
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid request");
+  });
+
+  it("returns a generic message instead of the thrown error", async () => {
+    const Event = require("../models/Event");
+    const spy = jest
+      .spyOn(Event, "find")
+      .mockImplementation(() => {
+        throw new Error("mongodb+srv://admin:hunter2@cluster0 timed out");
+      });
+    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await request(app).get("/api/events");
+    expect(res.status).toBe(500);
+    expect(res.body.error).not.toMatch(/hunter2|mongodb/i);
+    expect(res.body.error).toMatch(/something went wrong/i);
+
+    spy.mockRestore();
+    errorLog.mockRestore();
+  });
+});

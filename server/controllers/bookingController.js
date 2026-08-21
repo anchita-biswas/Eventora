@@ -4,11 +4,28 @@ const Event = require("../models/Event");
 const User = require("../models/User");
 const { sendOTPEmail, sendBookingEmail } = require("../utils/email");
 
+const MAX_SEATS_PER_BOOKING = 5;
+
 const generateOtp = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-exports.sendBookingOTP = async (req, res) => {
+/*
+ * The seat count decides both how much inventory is held and what the user is
+ * charged, so it is never taken on trust. A string, a float, a negative, or a
+ * `{ $gt: 0 }` object from a crafted request all have to fall out here rather
+ * than reach the $inc.
+ */
+const parseSeats = (value) => {
+  if (value === undefined) return 1; // older clients send no seat count
+  const seats = Number(value);
+  if (!Number.isInteger(seats) || seats < 1 || seats > MAX_SEATS_PER_BOOKING) {
+    return null;
+  }
+  return seats;
+};
+
+exports.sendBookingOTP = async (req, res, next) => {
   try {
     const otp = generateOtp();
     await OTP.findOneAndDelete({
@@ -23,13 +40,20 @@ exports.sendBookingOTP = async (req, res) => {
     await sendOTPEmail(req.user.email, otp, "event_booking");
     res.json({ message: "OTP sent to email" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.bookEvent = async (req, res) => {
+exports.bookEvent = async (req, res, next) => {
   try {
     const { eventId, otp } = req.body;
+
+    const seats = parseSeats(req.body.seats);
+    if (seats === null) {
+      return res.status(400).json({
+        error: `Please pick between 1 and ${MAX_SEATS_PER_BOOKING} seats.`,
+      });
+    }
 
     const otpRecord = await OTP.findOne({
       email: req.user.email,
@@ -45,10 +69,6 @@ exports.bookEvent = async (req, res) => {
       return res.status(400).json({ error: "Event not found" });
     }
 
-    if (event.availableSeats <= 0) {
-      return res.status(400).json({ error: "No seat available" });
-    }
-
     const existingBooking = await Booking.findOne({
       userId: req.user._id,
       eventId,
@@ -59,16 +79,39 @@ exports.bookEvent = async (req, res) => {
         .json({ error: "You have already booked this event" });
     }
 
-    let booking;
+    // Hold the seats now, atomically. A plain `availableSeats <= 0` read here
+    // would let every concurrent request pass the same check and oversell the
+    // event, because nothing was decremented until an admin confirmed. The
+    // $gte guard is what makes a party of 5 all-or-nothing.
+    const heldEvent = await Event.findOneAndUpdate(
+      { _id: event._id, availableSeats: { $gte: seats } },
+      { $inc: { availableSeats: -seats } },
+      { new: true },
+    );
+    if (!heldEvent) {
+      return res.status(400).json({
+        error:
+          seats === 1
+            ? "No seat available"
+            : `Only ${event.availableSeats} seat(s) left for this event`,
+      });
+    }
+
     try {
-      booking = await Booking.create({
+      await Booking.create({
         userId: req.user._id,
         eventId,
         status: "pending",
         paymentStatus: "not_paid",
-        amount: event.ticketPrice,
+        seats,
+        amount: event.ticketPrice * seats,
       });
     } catch (error) {
+      // The booking never existed, so nothing else will ever release these
+      // seats — put them back before returning.
+      await Event.findByIdAndUpdate(event._id, {
+        $inc: { availableSeats: seats },
+      });
       if (error.code === 11000) {
         return res
           .status(400)
@@ -83,11 +126,11 @@ exports.bookEvent = async (req, res) => {
         "Booking created. Please check your email for updates on your booking status.",
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.confirmBooking = async (req, res) => {
+exports.confirmBooking = async (req, res, next) => {
   try {
     const paymentStatus = req.body.paymentStatus;
     if (!["paid", "not_paid"].includes(paymentStatus)) {
@@ -102,15 +145,13 @@ exports.confirmBooking = async (req, res) => {
       return res.status(400).json({ error: "Booking is already confirmed" });
     }
 
-    const updatedEvent = await Event.findOneAndUpdate(
-      { _id: booking.eventId._id, availableSeats: { $gt: 0 } },
-      { $inc: { availableSeats: -1 } },
-      { new: true },
-    );
-    if (!updatedEvent) {
-      return res.status(400).json({ error: "No seat available" });
+    // A cancelled booking already gave its seat back, so confirming it would
+    // hand out a seat that was never held.
+    if (booking.status === "cancelled") {
+      return res.status(400).json({ error: "Booking was cancelled" });
     }
 
+    // No seat maths here: the seat was taken when the booking was created.
     booking.status = "confirmed";
     booking.paymentStatus = paymentStatus;
     await booking.save();
@@ -118,38 +159,43 @@ exports.confirmBooking = async (req, res) => {
     // Admin confirms booking then confirmation mail sent to the booking owner
     const owner = await User.findById(booking.userId);
     if (owner) {
-      await sendBookingEmail(owner.email, owner.name, updatedEvent.title);
+      await sendBookingEmail(
+        owner.email,
+        owner.name,
+        booking.eventId.title,
+        booking.seats || 1,
+      );
     }
 
     res.json({ message: "Booking confirmed" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.getMyBookings = async (req, res) => {
+exports.getMyBookings = async (req, res, next) => {
   try {
     const bookings = await Booking.find({ userId: req.user._id }).populate(
       "eventId",
     );
     res.json(bookings);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.getAllBookings = async (req, res) => {
+exports.getAllBookings = async (req, res, next) => {
   try {
     const bookings = await Booking.find({})
       .populate("eventId")
       .populate("userId", "name email");
     res.json(bookings);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-exports.cancelBooking = async (req, res) => {
+exports.cancelBooking = async (req, res, next) => {
   try {
     const booking = await Booking.findById(req.params.id).populate("eventId");
     if (!booking) {
@@ -161,9 +207,13 @@ exports.cancelBooking = async (req, res) => {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
-    if (booking.status === "confirmed" && booking.eventId) {
+    // Pending bookings hold seats too, so both pending and confirmed release
+    // them. The `!== "cancelled"` guard keeps a repeated cancel from handing
+    // the same seats back twice. `|| 1` covers bookings made before parties
+    // existed, which have no `seats` field stored.
+    if (booking.status !== "cancelled" && booking.eventId) {
       await Event.findByIdAndUpdate(booking.eventId._id, {
-        $inc: { availableSeats: 1 },
+        $inc: { availableSeats: booking.seats || 1 },
       });
     }
 
@@ -172,6 +222,6 @@ exports.cancelBooking = async (req, res) => {
 
     res.json({ message: "Booking cancelled" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
