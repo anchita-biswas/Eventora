@@ -6,6 +6,14 @@ const eventRoutes = require("./routes/event.js");
 const bookingRoutes = require("./routes/booking.js");
 
 const app = express();
+
+// Render puts one proxy in front of us, so req.ip is that proxy unless we say
+// how many hops to trust. The rate limiters key on req.ip; without this every
+// visitor shares one bucket. Deliberately 1, not `true` — trusting the whole
+// X-Forwarded-For chain would let a client forge a header and get a fresh
+// bucket per request.
+app.set("trust proxy", 1);
+
 const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
   .split(",")
   .map((s) => s.trim());

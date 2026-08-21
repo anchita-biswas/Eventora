@@ -20,7 +20,7 @@ const authLimiter = makeLimiter(
 // new email, so the IP+email limiter never engages against someone creating
 // many accounts (and firing an OTP email to each) from one IP.
 const registerLimiter = makeLimiter(
-  10,
+  50,
   (req) => req.ip,
   "Too many registration attempts, please try again later.",
 );
