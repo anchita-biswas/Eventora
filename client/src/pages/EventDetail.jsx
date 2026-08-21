@@ -88,7 +88,7 @@ const EventDetail = () => {
 
             <div className="p-8 md:p-12">
                 <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-6">
-                    <div>
+                    <div className="min-w-0">
                         <div className="inline-block bg-[var(--accent-violet)]/15 text-[var(--accent-violet-light)] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide mb-3">
                             {event.category}
                         </div>
@@ -96,7 +96,7 @@ const EventDetail = () => {
                         <p className="text-[var(--text-body)] text-lg leading-relaxed mb-6">{event.description}</p>
                     </div>
 
-                    <div className="bg-white/5 p-6 rounded-2xl border border-white/10 w-full md:w-auto md:min-w-75 shrink-0">
+                    <div className="bg-white/5 p-6 rounded-2xl border border-white/10 w-full md:w-75 shrink-0">
                         <h3 className="text-xl font-semibold text-[var(--text-heading)] mb-6">Booking Details</h3>
 
                         <div className="space-y-4 mb-8">
