@@ -1,7 +1,10 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  // Relative by default: the server serves this bundle, so the API is always
+  // same-origin. An absolute fallback would bake a hostname into the build and
+  // break every deploy that isn't the machine it was built on.
+  baseURL: import.meta.env.VITE_API_URL || "/api",
   headers: {
     "Content-Type": "application/json",
   },
