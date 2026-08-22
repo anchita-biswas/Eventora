@@ -159,12 +159,7 @@ exports.confirmBooking = async (req, res, next) => {
     // Admin confirms booking then confirmation mail sent to the booking owner
     const owner = await User.findById(booking.userId);
     if (owner) {
-      await sendBookingEmail(
-        owner.email,
-        owner.name,
-        booking.eventId.title,
-        booking.seats || 1,
-      );
+      await sendBookingEmail(booking, owner);
     }
 
     res.json({ message: "Booking confirmed" });

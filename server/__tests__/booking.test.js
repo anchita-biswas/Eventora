@@ -330,11 +330,14 @@ describe("Confirmation email", () => {
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ paymentStatus: "paid" });
 
-    expect(sendBookingEmail).toHaveBeenCalledWith(
-      user.email,
-      user.name,
-      event.title,
-      3,
-    );
+    // The whole booking goes over now, not four scalars: the mail builds the
+    // entry-pass QR and that needs the event, the amount and the payment state.
+    // Last call, not the first: an earlier test in this file confirms a
+    // booking too and the module mock is shared across the suite.
+    const [sentBooking, sentUser] = sendBookingEmail.mock.calls.at(-1);
+    expect(sentBooking.seats).toBe(3);
+    expect(sentBooking.eventId.title).toBe(event.title);
+    expect(sentBooking.paymentStatus).toBe("paid");
+    expect(sentUser.email).toBe(user.email);
   });
 });
