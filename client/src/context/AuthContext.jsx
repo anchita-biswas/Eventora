@@ -30,6 +30,14 @@ export const AuthProvider = ({ children }) => {
         email,
         password,
       });
+      // With the server's OTP bypass on, registration answers with a full
+      // session instead of a "check your email". Sign the user in when it
+      // does — there is nothing left for the verification screen to verify.
+      if (data.token) {
+        const { token, ...profile } = data;
+        setUser(profile);
+        localStorage.setItem("user", JSON.stringify(profile));
+      }
       return data;
     } catch (err) {
       console.error("Registration failed: ", err);

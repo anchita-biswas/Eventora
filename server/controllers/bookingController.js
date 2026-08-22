@@ -6,6 +6,9 @@ const { sendOTPEmail, sendBookingEmail } = require("../utils/email");
 
 const MAX_SEATS_PER_BOOKING = 5;
 
+// See the note in authController.js — same flag, same reason, same lifespan.
+const otpBypassed = () => process.env.OTP_BYPASS === "true";
+
 const generateOtp = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -27,6 +30,12 @@ const parseSeats = (value) => {
 
 exports.sendBookingOTP = async (req, res, next) => {
   try {
+    // The client asks for an OTP before it can know whether one is needed, so
+    // the answer rides back in the response: `bypass` tells it to book direct.
+    if (otpBypassed()) {
+      return res.json({ message: "OTP not required", bypass: true });
+    }
+
     const otp = generateOtp();
     await OTP.findOneAndDelete({
       email: req.user.email,
@@ -55,13 +64,15 @@ exports.bookEvent = async (req, res, next) => {
       });
     }
 
-    const otpRecord = await OTP.findOne({
-      email: req.user.email,
-      otp,
-      action: "event_booking",
-    });
-    if (!otpRecord) {
-      return res.status(400).json({ error: "Invalid or expired OTP" });
+    if (!otpBypassed()) {
+      const otpRecord = await OTP.findOne({
+        email: req.user.email,
+        otp,
+        action: "event_booking",
+      });
+      if (!otpRecord) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
     }
 
     const event = await Event.findById(eventId);

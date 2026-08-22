@@ -6,6 +6,21 @@ const { sendOTPEmail } = require("../utils/email");
 
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
+/*
+ * Demo escape hatch. Render blocks outbound SMTP and Resend's shared sender
+ * only delivers to the account owner's own inbox, so an OTP that nobody
+ * receives locks every visitor out of the app entirely. With OTP_BYPASS on,
+ * accounts are created already verified and the verification step is skipped
+ * end to end.
+ *
+ * Read per call rather than captured at import so tests and a restart-free
+ * env change both take effect.
+ *
+ * ponytail: temporary until a mail provider is wired up. Every OTP code path
+ * below is left intact — unset the flag and verification comes back.
+ */
+const otpBypassed = () => process.env.OTP_BYPASS === "true";
+
 const generateToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
@@ -57,8 +72,23 @@ exports.registerUser = async (req, res, next) => {
       email,
       password: hashedPassword,
       role: "user",
-      isVerified: false,
+      isVerified: otpBypassed(),
     });
+
+    if (otpBypassed()) {
+      // Same shape as a successful login, so the client can sign the new
+      // account straight in rather than parking it on a verification screen.
+      const token = generateToken(user._id, user.role);
+      setAuthCookie(res, token);
+      return res.status(201).json({
+        message: "User registered successfully.",
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        token,
+      });
+    }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await OTP.create({ email, otp, action: "account_verification" });
@@ -98,7 +128,9 @@ exports.loginUser = async (req, res, next) => {
       return invalidCredentials();
     }
 
-    if (!user.isVerified && user.role === "user") {
+    // Accounts registered before the bypass was switched on are still
+    // unverified, so the flag has to clear them here too.
+    if (!otpBypassed() && !user.isVerified && user.role === "user") {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       await OTP.deleteMany({ email, action: "account_verification" });
       await OTP.create({ email, otp, action: "account_verification" });

@@ -52,7 +52,14 @@ const EventDetail = () => {
 
         try {
             if (!showOTP) {
-                await api.post('/bookings/send-otp');
+                const { data } = await api.post('/bookings/send-otp');
+                // `bypass` means the server is running without OTP verification,
+                // so skip the code screen and place the booking right away.
+                if (data.bypass) {
+                    await api.post('/bookings', { eventId: event._id, seats });
+                    setSuccessMsg(`Booking requested for ${seats} ${seats === 1 ? 'seat' : 'seats'}! Awaiting admin confirmation.`);
+                    return;
+                }
                 setShowOTP(true);
                 setSuccessMsg('OTP sent to your email. Please verify to confirm booking.');
             } else {

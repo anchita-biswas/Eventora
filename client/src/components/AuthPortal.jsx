@@ -168,7 +168,13 @@ const SignUpForm = ({ onSwitch }) => {
     setError("");
     try {
       if (!showOTP) {
-        await register(name, email, password);
+        const data = await register(name, email, password);
+        // A token means the server bypassed OTP and the account is already
+        // verified and signed in.
+        if (data.token) {
+          navigate("/dashboard");
+          return;
+        }
         setShowOTP(true);
         setError("");
       } else {
